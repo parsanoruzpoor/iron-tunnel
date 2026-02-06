@@ -69,7 +69,8 @@ def run():
         input("No config...")
         return
 
-    from engine.proxy import TunnelServer, TunnelClient
+    from engine.proxy import TCPProxy
+
 
     with open(CFG) as f:
         cfg = json.load(f)
