@@ -20,10 +20,7 @@ mkdir -p $INSTALL_DIR/configs
 
 echo "[*] Downloading Iron Tunnel files..."
 
-# ---- MAIN APP ----
 curl -fsSL $BASE_URL/iron-tunnel.py -o $INSTALL_DIR/iron-tunnel.py
-
-# ---- ENGINE ----
 curl -fsSL $BASE_URL/engine/proxy.py -o $INSTALL_DIR/engine/proxy.py
 curl -fsSL $BASE_URL/engine/status.py -o $INSTALL_DIR/engine/status.py
 curl -fsSL $BASE_URL/engine/__init__.py -o $INSTALL_DIR/engine/__init__.py
