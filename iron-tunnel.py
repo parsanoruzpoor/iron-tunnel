@@ -27,7 +27,7 @@ def find_free_port():
         s.bind(("", 0))
         return s.getsockname()[1]
 
-def test_target(target, timeout=3):
+def test_target(target, timeout=2):
     host, port = target.split(":")
     port = int(port)
     try:
@@ -67,10 +67,24 @@ def logo():
 """)
 
 def menu():
-    status = connection_status()
-    print(f"""
-[ Status: {status} ]
+    from engine.status import get_status
 
+    clear()
+    logo()
+    print(f"[ Tunnel Status: {connection_status()} ]\n")
+
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE) as f:
+            cfg = json.load(f)
+        print("Outbound Status:")
+        for t in cfg.get("targets", []):
+            s = get_status(t)
+            icon = {"CONNECTED":"🟢","DEAD":"🔴","CHECKING":"🟡"}.get(s,"⚪")
+            print(f" {icon} {t} [{s}]")
+    else:
+        print("No config")
+
+    print("""
 [1] Create Tunnel
 [2] Run Tunnel
 [3] Show Config
@@ -78,148 +92,104 @@ def menu():
 [0] Exit
 """)
 
-# ---------------- CREATE TUNNEL ----------------
+# ---------------- CREATE ----------------
 def create_tunnel():
     clear()
     logo()
     print("=== Create Tunnel ===\n")
 
     mode = input("Mode (iran/kharej): ").strip().lower()
-    if mode not in ("iran", "kharej"):
-        print("Invalid mode")
-        input("Press Enter...")
+    if mode not in ("iran","kharej"):
+        input("Invalid mode...")
         return
 
-    listen_port = input("Listen Port (empty = auto): ").strip()
-    if listen_port:
-        if not listen_port.isdigit():
-            print("Invalid port")
-            return
-        listen_port = int(listen_port)
+    listen_ip = "0.0.0.0"
+
+    pref = input("Preferred listen port (empty = auto): ").strip()
+    if pref and pref.isdigit() and is_port_free(int(pref)):
+        listen_port = int(pref)
     else:
         listen_port = find_free_port()
+        print(f"Auto port: {listen_port}")
 
-    config = {
-        "mode": mode,
-        "listen_port": listen_port
-    }
-
-    if mode == "iran":
-        kh_ip = input("Kharej Server IP: ").strip()
-        kh_port = input("Kharej Tunnel Port: ").strip()
-        if not kh_port.isdigit():
-            print("Invalid port")
-            return
-        config["kharej_ip"] = kh_ip
-        config["kharej_port"] = int(kh_port)
-
-    else:  # kharej
-        out_port = input("Outbound (VLESS) Port [127.0.0.1]: ").strip()
-        if not out_port.isdigit():
-            print("Invalid port")
-            return
-        config["outbound_port"] = int(out_port)
+    count = int(input("How many outbound targets? "))
+    targets = []
+    for i in range(count):
+        ip = input(f"Target {i+1} IP: ").strip()
+        port = input(f"Target {i+1} Port: ").strip()
+        targets.append(f"{ip}:{port}")
 
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=2)
+    with open(CONFIG_FILE,"w") as f:
+        json.dump({
+            "mode": mode,
+            "listen": f"{listen_ip}:{listen_port}",
+            "targets": targets
+        }, f, indent=2)
 
-    print("\n[✓] Tunnel created")
-    input("Press Enter...")
+    input("\n[✓] Tunnel created. Press Enter...")
 
-# ---------------- RUN TUNNEL ----------------
+# ---------------- RUN ----------------
+async def tunnel_runtime(proxy, targets):
+    from engine.status import status_loop
+    asyncio.create_task(status_loop(targets))
+    await proxy.start()
+
 def run_tunnel():
     if not os.path.exists(CONFIG_FILE):
-        print("No config found.")
+        input("No config...")
         return
 
     with open(CONFIG_FILE) as f:
         cfg = json.load(f)
 
-    mode = cfg["mode"]
-    listen_port = cfg["listen_port"]
+    host, port = cfg["listen"].split(":")
+    targets = cfg.get("targets", [])
 
-    from engine.proxy import start_server
-
-    if mode == "iran":
-        target_ip = cfg["kharej_ip"]
-        target_port = cfg["kharej_port"]
-    else:
-        target_ip = "127.0.0.1"
-        target_port = cfg["outbound_port"]
+    from engine.proxy import TCPProxy
+    proxy = TCPProxy(host, int(port), targets)
 
     clear()
     logo()
-    print(f"Mode   : {mode}")
-    print(f"Listen : 0.0.0.0:{listen_port}")
-    print(f"Target : {target_ip}:{target_port}")
-    print("\n[CTRL+C to stop]\n")
+    print("[*] Tunnel running (CTRL+C to stop)\n")
 
-    asyncio.run(
-        start_server(
-            listen_port,
-            target_ip,
-            target_port
-        )
-    )
+    try:
+        asyncio.run(tunnel_runtime(proxy, targets))
+    except KeyboardInterrupt:
+        input("\nStopped. Press Enter...")
 
-# ---------------- SHOW / TEST ----------------
+# ---------------- OTHER ----------------
 def show_config():
     clear()
     logo()
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE) as f:
-            print(f.read())
-    else:
-        print("No config found.")
-    input("\nPress Enter...")
+    print(open(CONFIG_FILE).read() if os.path.exists(CONFIG_FILE) else "No config")
+    input()
 
 def test_connection_menu():
     clear()
     logo()
-    print("=== Connection Test ===\n")
-
     if not os.path.exists(CONFIG_FILE):
-        print("No config found.")
-        input("Press Enter...")
+        input("No config...")
         return
 
     with open(CONFIG_FILE) as f:
         cfg = json.load(f)
 
-    targets = cfg.get("targets", [])
-    if not targets:
-        print("No targets defined in config.")
-        input("Press Enter...")
-        return
+    for t in cfg.get("targets", []):
+        print(f"{t} -> {'CONNECTED' if test_target(t) else 'FAILED'}")
 
-    for t in targets:
-        print(f"{t} -> ", end="")
-        print("CONNECTED" if test_target(t) else "FAILED")
-
-    input("\nPress Enter...")
+    input()
 
 # ---------------- MAIN ----------------
 def main():
     while True:
-        clear()
-        logo()
         menu()
         c = input("Select > ").strip()
-
-        if c == "1":
-            create_tunnel()
-        elif c == "2":
-            run_tunnel()
-        elif c == "3":
-            show_config()
-        elif c == "4":
-            test_connection_menu()
-        elif c == "0":
-            sys.exit(0)
-        else:
-            print("Invalid option")
-            input("Press Enter...")
+        if c=="1": create_tunnel()
+        elif c=="2": run_tunnel()
+        elif c=="3": show_config()
+        elif c=="4": test_connection_menu()
+        elif c=="0": sys.exit(0)
 
 if __name__ == "__main__":
     main()

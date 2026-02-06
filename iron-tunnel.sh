@@ -16,15 +16,32 @@ apt install -y python3 python3-pip curl
 
 echo "[*] Preparing directories..."
 mkdir -p $INSTALL_DIR/engine
+mkdir -p $INSTALL_DIR/configs
 
-echo "[*] Downloading Iron Tunnel..."
-curl -fsSL $BASE_URL/iron-tunnel.py -o $INSTALL_DIR/iron-tunnel.py
+echo "[*] Downloading Iron Tunnel files..."
+
+# ---- MAIN APP ----
+curl -fsSL $BASE_URL/iron.py -o $INSTALL_DIR/iron.py
+
+# ---- ENGINE ----
 curl -fsSL $BASE_URL/engine/proxy.py -o $INSTALL_DIR/engine/proxy.py
-curl -fsSL $BASE_URL/engine/__init__.py -o $INSTALL_DIR/engine/__init__.py || true
+curl -fsSL $BASE_URL/engine/status.py -o $INSTALL_DIR/engine/status.py
+curl -fsSL $BASE_URL/engine/__init__.py -o $INSTALL_DIR/engine/__init__.py
 
-chmod +x $INSTALL_DIR/iron-tunnel.py
+# ---- DEFAULT CONFIG ----
+if [[ ! -f "$INSTALL_DIR/configs/tunnel.json" ]]; then
+cat <<EOF > $INSTALL_DIR/configs/tunnel.json
+{
+  "mode": "iran",
+  "listen": "0.0.0.0:0",
+  "targets": []
+}
+EOF
+fi
 
-ln -sf $INSTALL_DIR/iron-tunnel.py /usr/local/bin/iron-tunnel
+chmod +x $INSTALL_DIR/iron.py
+
+ln -sf $INSTALL_DIR/iron.py /usr/local/bin/iron-tunnel
 
 echo
 echo "[✓] Iron Tunnel installed successfully"
