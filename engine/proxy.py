@@ -2,6 +2,7 @@ import asyncio
 
 BUFFER = 65536
 
+
 async def pipe(reader, writer):
     try:
         while True:
@@ -10,32 +11,44 @@ async def pipe(reader, writer):
                 break
             writer.write(data)
             await writer.drain()
+    except:
+        pass
     finally:
         writer.close()
-        await writer.wait_closed()
 
-class TCPProxy:
-    def __init__(self, host, port, targets):
+
+class TunnelServer:
+    def __init__(self, host, port):
         self.host = host
         self.port = port
-        self.targets = targets
-        self.idx = 0
-
-    def pick_target(self):
-        t = self.targets[self.idx % len(self.targets)]
-        self.idx += 1
-        h,p = t.split(":")
-        return h,int(p)
 
     async def handle(self, r, w):
-        h,p = self.pick_target()
-        rr,rw = await asyncio.open_connection(h,p)
-        await asyncio.gather(
-            pipe(r,rw),
-            pipe(rr,w)
-        )
+        await pipe(r, w)
 
     async def start(self):
         server = await asyncio.start_server(self.handle, self.host, self.port)
+        print(f"[✓] Kharej listening on {self.host}:{self.port}")
+        async with server:
+            await server.serve_forever()
+
+
+class TunnelClient:
+    def __init__(self, lhost, lport, rhost, rport):
+        self.lhost = lhost
+        self.lport = lport
+        self.rhost = rhost
+        self.rport = rport
+
+    async def handle(self, lr, lw):
+        rr, rw = await asyncio.open_connection(self.rhost, self.rport)
+        await asyncio.gather(
+            pipe(lr, rw),
+            pipe(rr, lw)
+        )
+
+    async def start(self):
+        server = await asyncio.start_server(self.handle, self.lhost, self.lport)
+        print(f"[✓] Iran listening on {self.lhost}:{self.lport}")
+        print(f"[→] Tunnel to {self.rhost}:{self.rport}")
         async with server:
             await server.serve_forever()
