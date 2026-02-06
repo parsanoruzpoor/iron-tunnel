@@ -21,7 +21,7 @@ mkdir -p $INSTALL_DIR/configs
 echo "[*] Downloading Iron Tunnel files..."
 
 # ---- MAIN APP ----
-curl -fsSL $BASE_URL/iron.py -o $INSTALL_DIR/iron.py
+curl -fsSL $BASE_URL/iron-tunnel.py -o $INSTALL_DIR/iron-tunnel.py
 
 # ---- ENGINE ----
 curl -fsSL $BASE_URL/engine/proxy.py -o $INSTALL_DIR/engine/proxy.py
@@ -39,9 +39,9 @@ cat <<EOF > $INSTALL_DIR/configs/tunnel.json
 EOF
 fi
 
-chmod +x $INSTALL_DIR/iron.py
+chmod +x $INSTALL_DIR/iron-tunnel.py
 
-ln -sf $INSTALL_DIR/iron.py /usr/local/bin/iron-tunnel
+ln -sf $INSTALL_DIR/iron-tunnel.py /usr/local/bin/iron-tunnel
 
 echo
 echo "[✓] Iron Tunnel installed successfully"
