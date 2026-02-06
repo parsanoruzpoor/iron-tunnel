@@ -178,6 +178,7 @@ def test_connection_menu():
     clear()
     logo()
     print("=== Connection Test ===\n")
+
     if not os.path.exists(CONFIG_FILE):
         print("No config found.")
         input("Press Enter...")
@@ -186,7 +187,13 @@ def test_connection_menu():
     with open(CONFIG_FILE) as f:
         cfg = json.load(f)
 
-    for t in cfg["targets"]:
+    targets = cfg.get("targets", [])
+    if not targets:
+        print("No targets defined in config.")
+        input("Press Enter...")
+        return
+
+    for t in targets:
         print(f"{t} -> ", end="")
         print("CONNECTED" if test_target(t) else "FAILED")
 
