@@ -82,7 +82,7 @@ def menu():
 def create_tunnel():
     clear()
     logo()
-    print("=== Create New Tunnel ===\n")
+    print("=== Create Tunnel ===\n")
 
     mode = input("Mode (iran/kharej): ").strip().lower()
     if mode not in ("iran", "kharej"):
@@ -90,95 +90,78 @@ def create_tunnel():
         input("Press Enter...")
         return
 
-    listen_ip = input("Listen IP (0.0.0.0): ").strip() or "0.0.0.0"
-
-    pref = input("Preferred Listen Port (e.g. 443, empty = auto): ").strip()
-    if pref:
-        if not pref.isdigit():
+    listen_port = input("Listen Port (empty = auto): ").strip()
+    if listen_port:
+        if not listen_port.isdigit():
             print("Invalid port")
-            input("Press Enter...")
             return
-        pref = int(pref)
-        if is_port_free(pref, listen_ip):
-            listen_port = pref
-        else:
-            suggested = find_free_port()
-            print(f"\nPort {pref} is busy.")
-            print(f"Suggested free port: {suggested}")
-            yn = input("Use suggested port? (Y/n): ").strip().lower()
-            if yn == "n":
-                print("Canceled.")
-                input("Press Enter...")
-                return
-            listen_port = suggested
+        listen_port = int(listen_port)
     else:
         listen_port = find_free_port()
-        print(f"Auto-selected free port: {listen_port}")
-
-    try:
-        count = int(input("\nHow many outbound targets? "))
-        if count <= 0:
-            raise ValueError
-    except:
-        print("Invalid number")
-        input("Press Enter...")
-        return
-
-    targets = []
-    for i in range(count):
-        ip = input(f"Target {i+1} IP: ").strip()
-        port = input(f"Target {i+1} Port: ").strip()
-        if not port.isdigit():
-            print("Invalid target port")
-            input("Press Enter...")
-            return
-        targets.append(f"{ip}:{port}")
 
     config = {
         "mode": mode,
-        "listen": f"{listen_ip}:{listen_port}",
-        "targets": targets
+        "listen_port": listen_port
     }
+
+    if mode == "iran":
+        kh_ip = input("Kharej Server IP: ").strip()
+        kh_port = input("Kharej Tunnel Port: ").strip()
+        if not kh_port.isdigit():
+            print("Invalid port")
+            return
+        config["kharej_ip"] = kh_ip
+        config["kharej_port"] = int(kh_port)
+
+    else:  # kharej
+        out_port = input("Outbound (VLESS) Port [127.0.0.1]: ").strip()
+        if not out_port.isdigit():
+            print("Invalid port")
+            return
+        config["outbound_port"] = int(out_port)
 
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f, indent=2)
 
-    print("\n[✓] Tunnel created successfully")
-    print(f"Listening on: {listen_ip}:{listen_port}")
-    input("Press Enter to return to menu...")
+    print("\n[✓] Tunnel created")
+    input("Press Enter...")
 
 # ---------------- RUN TUNNEL ----------------
 def run_tunnel():
     if not os.path.exists(CONFIG_FILE):
         print("No config found.")
-        input("Press Enter...")
         return
 
     with open(CONFIG_FILE) as f:
         cfg = json.load(f)
 
-    host, port = cfg["listen"].split(":")
-    port = int(port)
-    targets = cfg["targets"]
+    mode = cfg["mode"]
+    listen_port = cfg["listen_port"]
 
-    from engine.proxy import TCPProxy
+    from engine.proxy import start_server
+
+    if mode == "iran":
+        target_ip = cfg["kharej_ip"]
+        target_port = cfg["kharej_port"]
+    else:
+        target_ip = "127.0.0.1"
+        target_port = cfg["outbound_port"]
 
     clear()
     logo()
-    print("[*] Tunnel running")
-    print(f"[*] Listen: {host}:{port}")
-    print("[*] Targets:")
-    for t in targets:
-        print(f"   - {t}")
+    print(f"Mode   : {mode}")
+    print(f"Listen : 0.0.0.0:{listen_port}")
+    print(f"Target : {target_ip}:{target_port}")
     print("\n[CTRL+C to stop]\n")
 
-    proxy = TCPProxy(host, port, targets)
-    try:
-        asyncio.run(proxy.start())
-    except KeyboardInterrupt:
-        print("\n[!] Tunnel stopped")
-        input("Press Enter...")
+    asyncio.run(
+        start_server(
+            listen_port,
+            target_ip,
+            target_port
+        )
+    )
 
 # ---------------- SHOW / TEST ----------------
 def show_config():

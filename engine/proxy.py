@@ -1,43 +1,61 @@
 import asyncio
-import random
 
-class TCPProxy:
-    def __init__(self, listen_port, outbound_ports):
-        self.listen_port = listen_port
-        self.outbound_ports = outbound_ports
+BUFFER = 65536
 
-    async def pipe(self, reader, writer):
+
+async def pipe(reader, writer):
+    try:
+        while True:
+            data = await reader.read(BUFFER)
+            if not data:
+                break
+            writer.write(data)
+            await writer.drain()
+    except Exception:
+        pass
+    finally:
         try:
-            while True:
-                data = await reader.read(4096)
-                if not data:
-                    break
-                writer.write(data)
-                await writer.drain()
+            writer.close()
+            await writer.wait_closed()
         except:
             pass
-        finally:
-            writer.close()
 
-    async def handle(self, client_reader, client_writer):
-        port = random.choice(self.outbound_ports)
 
-        try:
-            remote_reader, remote_writer = await asyncio.open_connection(
-                "127.0.0.1", port
-            )
-        except:
-            client_writer.close()
-            return
+async def handle_client(local_reader, local_writer, target_host, target_port):
+    peer = local_writer.get_extra_info("peername")
+    print(f"[+] Incoming connection from {peer}")
+
+    try:
+        remote_reader, remote_writer = await asyncio.open_connection(
+            target_host, target_port
+        )
+        print(f"[→] Connected to target {target_host}:{target_port}")
 
         await asyncio.gather(
-            self.pipe(client_reader, remote_writer),
-            self.pipe(remote_reader, client_writer)
+            pipe(local_reader, remote_writer),
+            pipe(remote_reader, local_writer)
         )
 
-    async def start(self):
-        server = await asyncio.start_server(
-            self.handle, "0.0.0.0", self.listen_port
-        )
-        async with server:
-            await server.serve_forever()
+    except Exception as e:
+        print(f"[!] Connection error: {e}")
+
+    finally:
+        try:
+            local_writer.close()
+            await local_writer.wait_closed()
+        except:
+            pass
+
+
+async def start_server(listen_port, target_host, target_port):
+    server = await asyncio.start_server(
+        lambda r, w: handle_client(r, w, target_host, target_port),
+        host="0.0.0.0",
+        port=listen_port
+    )
+
+    print(f"[✓] Listening on 0.0.0.0:{listen_port}")
+    print(f"[→] Forwarding to {target_host}:{target_port}")
+
+    async with server:
+        await server.serve_forever()
